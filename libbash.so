@@ -1,0 +1,2403 @@
+#!/system/bin/sh
+AGVARR="$@"; SCRIPT="$0"; AGV1="$1"; AGV2="$2"; AGV3="$3"; AGV4="$4"; AGV5="$5"; exec 2>/dev/null; MYSCRIPT="$(realpath "$0")"; MYPATH="${MYSCRIPT%/*}"; busybox="$MYPATH/libbusybox.so"; PATH="$MYPATH:$PATH:/sbin:/system/bin:/system/xbin"; cmds="$SCRIPT $AGVARR"
+unset LD_PRELOAD
+
+if [ ! -f "$MYPATH/libbusybox.so" ]; then
+echo "Missing libbusybox.so"; exit 1
+fi
+chmod 775 "$MYPATH/"*
+
+RC='\033[0m' RED='\033[0;31m' BRED='\033[1;31m' GRAY='\033[1;30m' BLUE='\033[0;34m' BBLUE='\033[1;34m' CYAN='\033[0;34m' CYAN='\033[1;34m' WHITE='\033[1;37m' GREEN='\033[0;32m' BGREEN='\033[1;32m' YELLOW='\033[1;33m' PURPLE='\033[0;35m' BPURPLE='\033[1;35m' ORANGE='\033[0;33m'
+
+# Get user id
+
+test -z "$USER_ID" && USER_ID="$(id -u)"
+
+# Get system information
+
+API=$(getprop ro.build.version.sdk)
+  ABI=$(getprop ro.product.cpu.abi)
+  if [ "$ABI" = "x86" ]; then
+    ARCH=x86
+    ABI32=x86
+    IS64BIT=false
+  elif [ "$ABI" = "arm64-v8a" ]; then
+    ARCH=arm64
+    ABI32=armeabi-v7a
+    IS64BIT=true
+  elif [ "$ABI" = "x86_64" ]; then
+    ARCH=x64
+    ABI32=x86
+    IS64BIT=true
+  else
+    ARCH=arm
+    ABI=armeabi-v7a
+    ABI32=armeabi-v7a
+    IS64BIT=false
+  fi
+
+DEVICE_API="$API"
+DEVICE_ABI="$ABI"
+DEVICE_ARCH="$ARCH"
+DEVICE_ABI32="$ABI32"
+DEVICE_64BIT="$IS64BIT"
+
+# Detect if system is in live mode or not
+
+
+BOOTMODE=false
+if pidof zygote &>/dev/null || [ "$USER_ID" != 0 ]; then
+BOOTMODE=true
+fi
+
+SYSTEM_AS_ROOT=true
+
+# If BOOTMODE=true that mean system is in live mode, root dir will be "/", overwise in recovery mode, root dir will be /android
+
+if $BOOTMODE; then
+ROOTDIR=/
+else
+ROOTDIR=/android
+fi
+
+# detect if system boot type is system-as-root or not
+
+if mount -t rootfs | grep -q " $ROOTDIR " || mount -t tmpfs | grep -q " $ROOTDIR "; then
+SYSTEM_AS_ROOT=false
+fi
+
+magisk_name="magisk32"
+[ "$IS64BIT" == true ] && magisk_name="magisk64"
+
+help(){
+echo "Magisk Installer script for emulator
+usage: inmagisk [OPTION]
+Available option:
+ install                       Open Menu for install Magisk
+ install:<build>               Install/Update Magisk
+ uninstall                     Uninstall Magisk and its modules"
+}
+
+ui_print(){ echo -e "$1"; }
+cre(){
+echo -ne "${GRAY}@$1${RC}"
+}
+
+####################
+# ENGLISH 
+####################
+
+
+text_press_enter_menu="PRESS ENTER TO BACK TO MENU"
+text_cannot_mm="Cannot install or this app is adready installed"
+text_success_mm="Install success!"
+text_warn_uninstall_magisk="Do you want to uninstall Magisk?"
+text_done="Done!"
+text_saved_magisk_apk_to="Saved Magisk APK to"
+text_mount_rw_system="Mount system partition (Read-write)"
+text_mount_ro_system="Mount system partition (Read-only)"
+text_obtain_root="Obtain ROOT access..."
+text_obtain_root_failed="Cannot obtain ROOT access"
+text_recommended="Recommended"
+text_install_app="Install Magisk app"
+text_install_app_sug="Please install Magisk app by yourself"
+text_install="Install"
+text_setup="Initialize Magisk Core"
+text_rm_magisk_files="Remove magisk additional files"
+text_extract_magisk_apk="Extract Magisk APK"
+text_failed_mount_system="Looks like the system partition is locked at read-only"
+text_enter_magisk_apk="Enter path to your Magisk APK"
+text_example="Example"
+text_unpack_ramdisk="Unpack the ramdisk image"
+text_unpack_ramdisk_fail="Unable to unpack the ramdisk image"
+text_patch_ramdisk="Patching ramdisk image"
+text_repack_ramdisk="Repack new ramdisk image"
+text_repack_ramdisk_fail="Unable to repack new ramdisk image"
+text_enter_path_ramdisk="Enter path to your ramdisk"
+text_new_ramdisk="New ramdisk image was saved to"
+text_uninstall_fail="! No Magisk found on system or GearLock"
+text_cannot_mount_part="Unable to mount the partition!"
+text_wrong_input="Wrong input, please enter again correctly"
+text_enter_part="Enter the ${BGREEN}partition${RC} number where you got this ${BPURPLE}Android-x86 OS${RC} installed"
+text_enter_ramdisk="Enter the ${BGREEN}ramdisk.img${RC} number from this ${BPURPLE}Android-x86 OS${RC}"
+text_unpatch_ramdisk="Remove patch with magisk from ramdisk"
+text_backup_not_exist="Backup not exist, cannot uninstall"
+text_uninstall_magisk_in="Uninstall Magisk from system and GearLock"
+text_restore_original_ramdisk="Restore ramdisk back to original"
+text_choice=CHOICE
+text_run_with_root="Run script with root access"
+text_cannot_install_magisk="Unable to install Magisk!"
+text_cannot_uninstall_magisk="Unable to uninstall Magisk!"
+text_added_bs_module="Added Bluestacks Fix Magisk modules"
+text_magisk_patched_ramdisk="Magisk patched ramdisk image detected"
+text_saved_ramdisk_info="Saved ramdisk information to" 
+text_unsupport_ramdisk_format="Unsupported ramdisk format"
+text_tell_remove_rusty_magisk="You may have rust-magisk installed, please remove it if present!!!"
+text_magisk_tmpfs_directory="Magisk tmpfs path"
+text_use_current_ramdisk_info="Do you want to use the current ramdisk information"
+text_install_gearlock="Please install GearLock first"
+text_building_gxp="Build GearLock extension"
+text_saved_magisk_gxp_to="Saved extension to"
+text_uninstalling_magisk="Uninstalling Magisk"
+text_system_not_writeable="System is not writeable! Cannot completely uninstall."
+text_grant_inter_access_permission="Please grant app the permission to access Internal Storage"
+text_select_magisk_app="Select Magisk version you want to install"
+text_guide_rm_magisk_app="Type \"rm\" with a number to delete target version"
+text_ask_keep_modules="Do you want to preserve modules (Only remove Magisk)?"
+text_cannot_detect_target_ramdisk="Unable to detect target ramdisk"
+text_find_ramdisk_auto="It's difficult to detect target ramdisk correctly.
+Do you want to automatically find the target ramdisk?"
+text_enter_url="Custom link"
+text_exported_apk="Exported Magisk apk into [Internal Storage]/Magisk"
+text_export_apk_fail="Cannot export Magisk apk. Did you grant me permission?"
+text_installation_ended="Installation ended. Press Enter to continue" 
+text_cannot_mm_recovery="Can't install app from Recovery Mode"
+
+
+print_ramdisk_method(){
+pd "light_cyan" "Install Magisk into ramdisk image"
+echo "  1 - Direct install"
+echo "  2 - Select ramdisk image and patch"
+echo -n "[CHOICE]: "
+}
+
+print_unpatch_ramdisk(){
+pd "light_cyan" "Remove Magisk in ramdisk"
+echo "  1 - Direct uninstall"
+echo "  2 - Select ramdisk image and patch"
+echo -n "[CHOICE]: "
+}
+
+print_gxp_method(){
+pd "light_cyan" "Install Magisk by using GearLock"
+echo "  1 - Direct install"
+echo "  2 - Export GearLock extension (GXP)"
+echo -n "[CHOICE]: "
+}
+
+blissos_open_menu(){
+echo -e "- If you are using ${BPURPLE}Bluestacks${RC} emulator"
+echo -e "You can use ${BGREEN}BSTweaker 6.8.5+${RC} to enable Root access"
+
+pd none "- If you are using ${BPURPLE}Android x86${RC} (BlissOS)"
+pd none "You can press ${BGREEN}Alt+F1${RC} and type this command:"
+
+
+}
+
+print_info(){
+if $BOOTMODE; then
+p none "   Magisk: "; $hasMagisk && pd light_green "$(magisk -v) ($(magisk -V))" || pd light_red "Not found"
+p none "   Android Level: "; [ "$SDK" -lt "28" ] && pd light_red "$SDK" || pd light_green "$SDK"
+else
+pd light_blue "   Recovery Mode"
+fi
+p none "   System-as-root: "; [ "$SYSTEM_AS_ROOT" == "true" ] && pd light_green "$SYSTEM_AS_ROOT" || pd light_red "$SYSTEM_AS_ROOT"
+}
+
+
+warn_reboot(){
+echo " The device will reboot after a few seconds"
+  pd yellow " IF THE EMULATOR FREEZES, SIMPLY JUST REBOOT IT"
+}
+
+disable_magisk(){
+[ -f "$DLPATH/disable" ] && p light_red "[ON]" || p light_red "[OFF]"
+}
+
+disable_magisk_process(){
+[ -f "$DLPATH/disable" ] && rm -rf "$DLPATH/disable" || touch "$DLPATH/disable"
+}
+
+need_root_access(){
+
+[ "$(whoami)" == "root" ] || abortc light_red "! Need root access to perform this action"
+}
+
+print_menu(){
+pd gray  "=============================================="
+echo "   Magisk Installer Script for Android-x86 and Emulator"
+echo "   Written by HuskyDG - Free to use"
+# please don't change this or use "by HuskyDG + your name" for credits :((
+echo -e "$(print_info)"
+pd gray "=============================================="
+echo "  1 - Install/Update Magisk"
+pd gray "      Integrate Magisk root into Android x86 emulator"
+echo "  2 - Uninstall Magisk"
+pd gray "      Remove Magisk and its modules"
+echo "  3 - Remove all other root methods"
+pd gray "      Only use if you cannot find Disable root option"
+echo "----------"
+echo " 0 - Exit menu"
+p none "[CHOICE]: "
+}
+
+print_method(){
+pd gray "=============================================="
+echo "   Install/Update Magisk"
+pd gray "=============================================="
+pd light_cyan "Install Magisk method"
+echo "  1 - Install Magisk into \"/system\""
+pd gray "      The system partition must be mounted as read-write"
+pd gray "      Recommended for Android Emulator such as NoxPlayer, MuMu, ..."
+echo "  2 - Install Magisk into ramdisk.img/initrd.img (systemless)"
+pd gray "      Use this option if you can find ramdisk.img"
+pd gray "      Recommended for Android x86 project"
+echo "  3 - Install Magisk by using GearLock (system/systemless)"
+pd gray "      Use GearLock to active Magisk"
+pd gray "      Recommended for Android x86 project"
+echo "----------"
+echo "  e - Export Magisk apk"
+echo "  0 - Exit menu"
+pd light_red "* Note: Uninstall rusty-magisk to avoid conflicts"
+p none "[CHOICE]: "
+
+}
+
+print_magisk_builds(){
+echo "  1 - Canary `cre topjohnwu`"
+echo "  2 - Canary `cre TheHitMan7`"
+echo "  3 - Stable `cre topjohnwu`"
+echo "  e - $text_enter_url"
+}
+
+
+print_menu_install(){
+
+pd gray "=============================================="
+echo "   Install/Update Magisk"
+pd gray "=============================================="
+pd light_cyan "ONLINE"
+print_magisk_builds
+pd light_cyan "OFFLINE"
+echo "  a - Stable v24.1"
+echo "  x - Choose and install from another Magisk APK"
+echo "  z - Select downloaded Magisk APK"
+pd green "* Please check my wiki page to select suitable Magisk build"
+p none "[CHOICE]: "
+
+}
+
+####################
+# TIẾNG VIỆT 
+####################
+
+language_vn(){
+
+text_press_enter_menu="NHẤN ENTER ĐỂ TRỞ VỀ MENU"
+text_cannot_mm="Không thể cài đặt hoặc ứng dụng đã được cài đặt"
+text_success_mm="Cài đặt thành công!"
+text_warn_uninstall_magisk="Bạn có muốn gỡ cài đặt Magisk?"
+text_ask_keep_modules="Bạn có muốn giữ lại các mô-đun không (Chỉ gỡ Magisk)?"
+text_done="Đã xong!"
+text_saved_magisk_apk_to="Đã lưu Magisk APK vào"
+text_mount_rw_system="Gắn kết phân vùng system (Đọc-ghi)"
+text_mount_ro_system="Gắn kết phân vùng system (Chỉ đọc)"
+text_obtain_root="Đang lấy quyền ROOT.."
+text_obtain_root_failed="Không thể lấy quyền ROOT"
+text_recommended="Đề xuất"
+text_install_app="Cài đặt ứng dụng Magisk"
+text_install_app_sug="Vui lòng cài đặt ứng dụng Magisk thủ công"
+text_install="Cài đặt"
+text_setup="Thiết lập lõi Magisk"
+text_rm_magisk_files="Loại bỏ các tệp bổ sung của Magisk"
+text_extract_magisk_apk="Giải nén Magisk APK"
+text_failed_mount_system="Gắn kết phân vùng system thất bại"
+text_enter_magisk_apk="Nhập đường dẫn tới tệp Magisk APK của bạn"
+text_example="Ví dụ"
+text_unpack_ramdisk="Giải nén đĩa ảnh ramdisk"
+text_unpack_ramdisk_fail="Không thể giải nén đĩa ảnh!"
+text_patch_ramdisk="Đang vá đĩa ảnh ramdisk"
+text_repack_ramdisk="Đóng gói lại với đĩa ảnh ramdisk mới"
+text_repack_ramdisk_fail="Không thể đóng gói đĩa ảnh!"
+text_enter_path_ramdisk="Nhập đường dẫn đến đĩa ảnh ramdisk.img"
+text_new_ramdisk="Đĩa ảnh ramdisk mới đã lưu vào"
+text_uninstall_fail="! Không tìm thấy Magisk trên hệ thống"
+text_cannot_mount_part="Không thể gắn kết phân vùng!"
+text_wrong_input="Sai dữ liệu, vui lòng nhập lại"
+text_enter_part="Nhập số với ${BGREEN}phân vùng${RC} mà bạn đã cài đặt ${BPURPLE}Android-x86 OS${RC} này"
+text_enter_ramdisk="Nhập số tương ứng với ${BGREEN}ramdisk.img${RC} từ ${BPURPLE}Android-x86 OS${RC}"
+text_unpatch_ramdisk="Loại bỏ bản vá với magisk khỏi ramdisk"
+text_unpatch_ramdisk="Loại bỏ bản vá Magisk khỏi ramdisk"
+text_backup_not_exist="Bản sao lưu không tồn tại, không thể gỡ"
+text_uninstall_magisk_in="Gỡ bỏ Magisk khỏi hệ thống và GearLock"
+text_restore_original_ramdisk="Khôi phục ramdisk trở lại ban đầu"
+text_choice="CHỌN"
+text_run_with_root="Chạy script với quyền root"
+text_cannot_install_magisk="Không thể cài đặt Magisk!"
+text_cannot_uninstall_magisk="Không thể gỡ cài đặt Magisk!"
+text_added_bs_module="Đã thêm Magisk mô-đun Bluestacks Fix"
+text_magisk_patched_ramdisk="Đã phát hiện ramdisk đã vá với Magisk "
+text_saved_ramdisk_info="Đã lưu thông tin ramdisk vào"
+text_unsupport_ramdisk_format="Định dạng ramdisk không được hỗ trợ"
+text_tell_remove_rusty_magisk="Bạn có thể đã cài rusty-magisk, vui lòng hãy gỡ nó nếu có!!!"
+text_magisk_tmpfs_directory="Đường dẫn Magisk tmpfs"
+text_use_current_ramdisk_info="Bạn có muốn sử dụng thông tin ramdisk hiện tại?"
+text_install_gearlock="Hãy cài đặt GearLock trước đã"
+text_building_gxp="Xây dựng phần mở rộng GearLock"
+text_saved_magisk_gxp_to="Đã lưu phần mở rộng vào"
+text_uninstalling_magisk="Đang gỡ bỏ Magisk"
+text_system_not_writeable="Hệ thống không thể ghi! Không thể gỡ bỏ hoàn toàn"
+text_grant_inter_access_permission="Vui lòng cung cấp cho ứng dụng quyền truy cập Bộ nhớ trong"
+text_select_magisk_app="Lựa chọn phiên bản Magisk mà bạn muốn cài đặt"
+text_guide_rm_magisk_app="Gõ \"rm\" với 1 con số để xóa phiên bản tương ứng"
+text_find_ramdisk_auto="Rất khó để phát hiện ramdisk đích một cách chính xác.
+Bạn có muốn tìm ramdisk tự động không?"
+text_enter_url="Liên kết tùy chỉnh"
+text_exported_apk="Đã xuất Magisk apk vào [Bộ nhớ trong]/Magisk"
+text_export_apk_fail="Không thể xuất Magisk apk. Bạn đã cấp quyền truy cập chưa?"
+text_installation_ended="Quá trình cài đặt đã kết thúc.  Nhấn Enter để tiếp tục"
+text_cannot_mm_recovery="Không thể cài đặt ứng dụng từ chế độ Recovery"
+
+need_root_access(){
+
+[ "$(whoami)" == "root" ] || abortc light_red "! Cần quyền truy cập root để thực hiện hành động này"
+}
+
+
+print_ramdisk_method(){
+pd "light_cyan" "Cài đặt Magisk vào đĩa ảnh ramdisk"
+echo "  1 - Cài đặt trực tiếp"
+echo "  2 - Chọn đĩa ảnh ramdisk và vá"
+echo -n "[CHỌN]: "
+}
+
+print_gxp_method(){
+pd "light_cyan" "Cài đặt Magisk bằng GearLock"
+echo "  1 - Cài đặt trực tiếp"
+echo "  2 - Tạo tệp mở rộng GearLock (GXP)"
+echo -n "[CHỌN]: "
+}
+
+print_unpatch_ramdisk(){
+pd "light_cyan" "Loại bỏ Magisk khỏi ramdisk"
+echo "  1 - Gỡ cài đặt trực tiếp"
+echo "  2 - Chọn đĩa ảnh ramdisk và vá"
+echo -n "[CHỌN]: "
+}
+
+
+
+warn_reboot(){
+echo " Thiết bị sẽ khởi động trong vài giây nữa"
+echo " NẾU HỆ THỐNG KHÔNG PHẢN HỒI, VUI LÒNG KHỞI ĐỘNG LẠI"
+}
+
+print_menu(){
+pd gray  "=============================================="
+echo "   Magisk on Android x86"
+echo "   by HuskyDG"
+# please don't change this or use "by HuskyDG + your name" for credits :((
+echo -e "$(print_info)"
+pd gray "=============================================="
+echo "  1 - Cài đặt hoặc cập nhật Magisk"
+pd gray "      Triển khai Magisk root vào Android-x86"
+echo "  2 - Gỡ cài đặt Magisk"
+pd gray "      Loại bỏ Magisk và các mô-đun của nó"
+echo "  3 - Loại bỏ các phương pháp ROOT khác"
+pd gray "      Chỉ sử dụng khi bạn không tìm thấy tùy chọn để tắt Root"
+echo "----------"
+echo " 0 - Thoát khỏi menu"
+p none "[CHỌN]: "
+}
+
+blissos_open_menu(){
+echo -e "- Nếu bạn đang sử dụng giả lập ${BPURPLE}Bluestacks${RC}"
+echo -e "Bạn có thể sử dụng ${BGREEN}BSTweaker 6.8.5+${RC} để bật quyền Root"
+
+pd none "- Nếu bạn đang sử dụng ${BPURPLE}Android x86${RC} như BlissOS";
+pd none "Bạn có thể nhấn ${BGREEN}ALT+F1${RC} và gõ dòng lệnh:"
+}
+
+print_menu_install(){
+
+pd gray "=============================================="
+echo "   Install/Update Magisk"
+pd gray "=============================================="
+pd light_cyan "TRỰC TUYẾN"
+print_magisk_builds
+pd light_cyan "NGOẠI TUYẾN"
+echo "  a - Stable v24.1"
+echo "  x - Chọn và cài đặt từ Magisk APK khác"
+echo "  z - Chọn phiên bản Magisk APK đã tải"
+pd green "* Vui lòng kiểm tra trang wiki của tôi để chọn bản dựng Magisk phù hợp"
+p none "[CHỌN]: "
+
+}
+
+print_method(){
+pd gray "=============================================="
+echo "   Cài đặt hoặc cập nhật Magisk"
+pd gray "=============================================="
+pd light_cyan "Phương thức cài đặt Magisk"
+echo "  1 - Cài đặt Magisk vào \"/system\""
+pd gray "      Phân vùng hệ thống có thể gắn kết đọc ghi"
+pd gray "      Khuyên dùng cho các giả lập Android như NoxPlayer, MuMu, ..."
+echo "  2 - Cài đặt Magisk vào ramdisk.img hoặc initrd.img (systemless)"
+pd gray "      Sử dụng tùy chọn này nếu bạn tìm thấy Ramdisk"
+pd gray "      Khuyên dùng cho Android x86 project"
+echo "  3 - Cài đặt Magisk bằng GearLock (system/systemless)"
+pd gray "      Cần có GearLock, sử dụng GearLock để kích hoạt Magisk"
+pd gray "      Khuyên dùng cho Android x86 project"
+echo "----------"
+echo "  e - Xuất Magisk apk"
+echo "  0 - Thoát khỏi menu"
+pd light_red "* Lưu ý: Gỡ bỏ rusty-magisk để tránh bị xung đột"
+p none "[CHỌN]: "
+
+}
+
+
+
+
+}
+
+
+LANGUAGE="$(getprop persist.sys.locale)"
+case "$LANGUAGE" in
+"vi-VN")
+    language_vn
+    ;;
+esac
+
+
+####################
+# defind remount function 
+####################
+
+
+
+mount_rw_system(){
+IS_SYSTEM_MOUNT=false
+if mount | grep rootfs | grep -q " / " || mount | grep tmpfs | grep -q " / "; then
+# legacy rootfs
+mount -o rw,remount "/system" && IS_SYSTEM_MOUNT=true
+else
+# system-as-root, mount "/"
+mount -o rw,remount "/" && IS_SYSTEM_MOUNT=true
+fi
+}
+
+mount_ro_system(){
+IS_SYSTEM_MOUNT=false
+if mount | grep rootfs | grep -q " / " || mount | grep tmpfs | grep -q " / "; then
+# legacy rootfs
+mount -o ro,remount "/system" && IS_SYSTEM_MOUNT=true
+else
+# system-as-root, mount "/"
+mount -o ro,remount "/" && IS_SYSTEM_MOUNT=true
+fi
+}
+
+####################
+# defind print text with color function 
+####################
+
+p(){
+COLOR=$1;TEXT="$2";escape="$1"
+[ "$COLOR" == "black" ] && escape="0;30"
+[ "$COLOR" == "red" ] && escape="0;31"
+[ "$COLOR" == "green" ] && escape="0;32"
+[ "$COLOR" == "orange" ] && escape="0;33"
+[ "$COLOR" == "blue" ] && escape="0;34"
+[ "$COLOR" == "purple" ] && escape="0;35"
+[ "$COLOR" == "cyan" ] && escape="0;36"
+[ "$COLOR" == "light_gray" ] && escape="0;37"
+[ "$COLOR" == "gray" ] && escape="1;30"
+[ "$COLOR" == "light_red" ] && escape="1;31"
+[ "$COLOR" == "light_green" ] && escape="1;32"
+[ "$COLOR" == "yellow" ] && escape="1;33"
+[ "$COLOR" == "light_blue" ] && escape="1;34"
+[ "$COLOR" == "light_purple" ] && escape="1;35"
+[ "$COLOR" == "light_cyan" ] && escape="1;36"
+[ "$COLOR" == "white" ] && escape="1;37"
+[ "$COLOR" == "none" ] && escape="0"
+code="\033[${escape}m"
+end_code="\033[0m"
+echo -en "$code$TEXT$end_code"
+}
+
+
+pd(){
+p "$1" "$2"; echo
+}
+
+
+
+
+
+abortc(){
+ERR_CODE="$3"
+pd "$1" "$2"; 
+test -z "$ERR_CODE" && ERR_CODE=1
+exit "$ERR_CODE"
+}
+
+if [ "$AGV1" != "noexec" ]; then
+
+priv_dir=/data/data/magisk.term
+[ -d "$priv_dir" ] && ! ls "$priv_dir" &>/dev/null && priv_dir=/data/data/com.termux
+[ ! -d "$priv_dir" ] && priv_dir=/data/data/com.termux
+[ ! -d "$priv_dir" ] && { echo "Something wrong! Abort"; exit; }
+cd "$priv_dir"
+DLPATH="$priv_dir/magisk"
+
+if [ ! -d "$DLPATH" ]; then
+rm -rf "$DLPATH" 2>/dev/null
+mkdir -p "$DLPATH" 2>/dev/null
+fi
+
+mkdir "$DLPATH/save"
+
+link(){ (
+agv1="$1"; agv2="$2"
+[ ! -f "$DLPATH/$agv2" ] && rm -rf "$DLPATH/$agv2" 2>/dev/null
+ln -s "$(which "$agv1")" "$DLPATH/$agv2" 2>/dev/null
+) }
+
+link "libapp.so" "magisk.apk"
+link "libbusybox.so" "busybox"
+link "liblegacy.so" "legacy.zip"
+link "libbash.so" "menu"
+link "libgxp.so" "gearlock_extension.zip"
+
+CACHEDIR="$priv_dir/cache/$$"
+DISKINFO="/data/adb/diskinfo"
+APKFILE="$JOBPWD/magisk.apk"
+MAGISKCORE="/system/etc/init/magisk"
+
+busybox_bin(){
+mkdir -p "$DLPATH/bin"
+"$busybox" busybox --install -s "$DLPATH/bin"
+PATH="$DLPATH/bin:$PATH"
+}
+hasMagisk=false
+[ ! -z "$(which magisk)" ] && [ ! -z "$(magisk -v)" ] && hasMagisk=true
+busybox_bin 2>/dev/null
+
+
+open_main(){
+if [ "$AGV1" == "option" ] && [ "$AGV2" == "help" ]; then
+help; exit
+fi
+if [ "$USER_ID" != "0" ]; then
+    p none "$text_run_with_root ? <Y/n> "
+    read ROOT
+    if [ "$ROOT" == "Y" -o "$ROOT" == "y" ]; then
+    export UNSHARE_MM=0
+    export ASH_STANDALONE=1
+        pd yellow "$text_obtain_root..."
+        ( su -c "$cmds" || /system/xbin/su -c "$cmds" || /system/bin/su -c "$cmds" || /sbin/su -c "$cmds" ) 2>/dev/null
+        ERR_CODE="$?"
+        if [ "$ERR_CODE" != 0 ]; then
+            
+            pd "light_red" "$text_obtain_root_failed"
+            blissos_open_menu
+            pd light_cyan "$DLPATH/menu"
+            
+        fi
+        exit 
+    elif ! [ "$ROOT" == "N" -o "$ROOT" == "n" ]; then
+        exit
+    fi
+fi
+while true; do 
+main; 
+done
+}
+
+fi
+
+SDK="$(getprop ro.build.version.sdk)"
+
+function cmdline() { 
+	awk -F"${1}=" '{print $2}' < /proc/cmdline | cut -d' ' -f1 2> /dev/null
+}
+
+
+umount_magic_mods(){
+
+# make sure there are no overlay under /system
+# overwise we are write to virtual read-write system not real system partition
+
+while mount -t overlay | grep -q " /system "; do
+umount -l /system
+done
+
+# umount magic mount if some modules mount some files into these path
+# because add files into these directory is useless
+# if we don't umount it, we might write to magisk created tmpfs mountpoint or magisk module directory
+
+
+local list_files="/system/etc
+/system/etc/*
+/system/addon.d
+/system/addon.d/*
+/system/etc/magisk
+/system/etc/init
+/system/etc/magisk/*
+/system/etc/init/* 
+/magisk
+/magisk/*"
+for file in $list_files; do
+  while true; do
+    umount $list_files || break;
+   done
+done
+}
+
+
+get_magisk_path(){
+
+# get some information from magisk
+
+MAGISK_TMP="$(magisk --path)"
+MAGISKDIR="$MAGISK_TMP/.magisk"
+if [ "$MAGISK_TMP" ]; then
+MAGISK_MIRROR="$MAGISKDIR/mirror"
+PATH="$MAGISK_TMP:$PATH"
+fi
+# SYSTEMDIR="/system"
+# SYSTEMROOTDIR="/"
+# [ "$MAGISK_TMP" ] && SYSTEMROOTDIR="/system_root"
+
+# umount to make sure there are no magisk module mount on these folder
+
+( umount_magic_mods ) &
+
+# no need to use Magisk's mirror anymore
+
+SYSTEMDIR="/system"
+SYSTEMROOTDIR="/"
+
+}
+
+
+
+# This script is write by HuskyDG
+ARG1="$1"
+JOBPWD="${0%/*}"
+bb=/data/local/tmp/busybox
+
+get_tmpdir(){
+
+TMPDIR="$CACHEDIR"
+[ "$USER_ID" == "0" ] && TMPDIR=/dev/tmp
+
+}
+get_tmpdir
+
+abort(){
+ERR_CODE="$2"
+echo "$1"; 
+test -z "$ERR_CODE" && ERR_CODE=1
+exit "$ERR_CODE"
+}
+
+
+
+
+
+gxp_template="$DLPATH/gearlock_extension.zip"
+
+unshare_environment(){
+if [ ! "$UNSHARE_MM" == "1" ]; then
+export UNSHARE_MM=1
+export ASH_STANDALONE=1
+"$busybox" unshare -m "$busybox" sh -o standalone "$SCRIPT" "$AGV1" "$AGV2" "$AGV3" "$AGV4" "$AGV5"
+exit
+fi
+}
+
+[ "$USER_ID" == "0" ] && unshare_environment 2>/dev/null
+
+[ "$USER_ID" == "0" ] && get_magisk_path
+
+ISENCRYPTED=false
+  grep ' /data ' /proc/mounts | grep -q 'dm-' && ISENCRYPTED=true
+  [ "$(getprop ro.crypto.state)" = "encrypted" ] && ISENCRYPTED=true
+
+stable_magisk_link="https://github.com/topjohnwu/Magisk/releases/download/v24.1/Magisk-v24.1.apk"
+canary_magisk_link="https://github.com/topjohnwu/magisk-files/blob/canary/app-debug.apk?raw=true"
+
+
+clean_flash(){
+umount -l "$TMPDIR"
+rm -rf "$TMPDIR"
+}
+
+turn_back(){
+p yellow "$text_press_enter_menu"
+read
+}
+
+random(){
+VALUE=$1; TYPE=$2; PICK="$3"; PICKC="$4"
+TMPR=""
+HEX="0123456789abcdef"; HEXC=16
+CHAR="qwertyuiopasdfghjklzxcvbnm"; CHARC=26
+NUM="0123456789"; NUMC=10
+COUNT=$(seq 1 1 $VALUE)
+list_pick=$HEX; C=$HEXC
+[ "$TYPE" == "char" ] &&  list_pick=$CHAR && C=$CHARC 
+[ "$TYPE" == "number" ] && list_pick=$NUM && C=$NUMC 
+[ "$TYPE" == "custom" ] && list_pick="$PICK" && C=$PICKC 
+      for i in $COUNT; do
+          random_pick=$(( $RANDOM % $C))
+          echo -n ${list_pick:$random_pick:1}
+      done
+
+}
+
+random_str(){
+random_length=$(random 1 custom 56789 5);
+random $random_length custom "qwertyuiopasdfghjklzxcvbnm0123456789QWERTYUIOPASDFGHJKLZXCVBNM" 63 | base64 | sed "s/=//g"
+}
+
+
+
+
+magisk_loader(){
+
+MAGISKTMP_TYPE="$1"
+test -z "$MAGISKTMP_TYPE" && MAGISKTMP_TYPE=1
+MAGISKTMP=/sbin
+
+[ "$MAGISK_IN_DEV" == "1" -o "$MAGISK_IN_DEV" == "true" ] && MAGISKTMP_TYPE=3
+
+magisk_overlay=`random_str`
+magisk_postfsdata=`random_str`
+magisk_service=`random_str`
+magisk_daemon=`random_str`
+magisk_boot_complete=`random_str`
+magisk_loadpolicy=`random_str`
+dev_random=`random_str`
+
+
+# always use "/dev/<random_string>" as magisk tmpfs
+
+     MAGISKTMP="/dev/$dev_random"
+     mount_sbin="mkdir -p \"$MAGISKTMP\"
+mnt_tmpfs \"$MAGISKTMP\"
+chmod 755 \"$MAGISKTMP\""
+     umount_sbin="umount /sbin"
+
+# apply multiple sepolicy at same time
+
+LOAD_MODULES_POLICY="rm -rf \"\$MAGISKTMP/.magisk/sepolicy.rules\"
+for module in \$(ls /data/adb/modules); do
+              if ! [ -f \"/data/adb/modules/\$module/disable\" ] && [ -f \"/data/adb/modules/\$module/sepolicy.rule\" ]; then
+                  echo \"## * module sepolicy: \$module\" >>\"\$MAGISKTMP/.magisk/sepolicy.rules\"
+                  cat  \"/data/adb/modules/\$module/sepolicy.rule\" >>\"\$MAGISKTMP/.magisk/sepolicy.rules\"
+                  echo \"\" >>\"\$MAGISKTMP/.magisk/sepolicy.rules\"
+                  
+              fi
+          done
+\$MAGISKTMP/magiskpolicy --live --apply \"\$MAGISKTMP/.magisk/sepolicy.rules\""
+
+unset LOG_MAGISK
+unset FORCE_MAGISKHIDE
+unset ADD_FORCE_MAGISKHIDE
+RM_RUSTY_MAGISK="#remove rusty-magisk gearlock module to make sure it is not conflicted with our magisk implement
+              rm /data/ghome/gearboot/overlay/rusty-magisk/init/init.superuser.rc
+              rm /data/.rusty-magisk/magisk.apk
+              rm /data/.rusty-magisk/magisk
+              rm /data/ghome/.local/bin/rusty-magisk"
+
+ADDITIONAL_SCRIPT="( # addition script
+rm -rf /data/adb/post-fs-data.d/fix_mirror_mount.sh
+rm -rf /data/adb/service.d/fix_modules_not_show.sh
+
+
+# additional script to deal with bullshit faulty design of emulator
+# that close built-in root will remove magisk's /system/bin/su
+
+echo \"
+export PATH=\\\"\$MAGISKTMP:\\\$PATH\\\"
+if [ -f \\\"/system/bin/magisk\\\" ]; then
+    umount -l /system/bin/su
+    rm -rf /system/bin/su
+    ln -fs ./magisk /system/bin/su
+    mount -o ro,remount /system/bin
+    umount -l /system/bin/magisk
+    mount --bind \\\"\$MAGISKTMP/magisk\\\" /system/bin/magisk
+fi\" >\$MAGISKTMP/emu/magisksu_survival.sh
+
+# additional script to deal with bullshit faulty design of Bluestacks
+# that /system is a bind mountpoint
+
+echo \"
+SCRIPT=\\\"\\\$0\\\"
+MAGISKTMP=\\\$(magisk --path) || MAGISKTMP=/sbin
+( #fix bluestacks
+MIRROR_SYSTEM=\\\"\\\$MAGISKTMP/.magisk/mirror/system\\\"
+test ! -d \\\"\\\$MIRROR_SYSTEM/android/system\\\" && exit
+test \\\"\\\$(cd /system; ls)\\\" == \\\"\\\$(cd \\\"\\\$MIRROR_SYSTEM\\\"; ls)\\\" && exit
+mount --bind \\\"\\\$MIRROR_SYSTEM/android/system\\\" \\\"\\\$MIRROR_SYSTEM\\\" )
+( #fix mount data mirror
+function cmdline() { 
+	awk -F\\\"\\\${1}=\\\" '{print \\\$2}' < /proc/cmdline | cut -d' ' -f1 2> /dev/null
+}
+
+SRC=\\\"\\\$(cmdline SRC)\\\"
+BIPATH=\\\"\\\$(cmdline BOOT_IMAGE)\\\"
+DATA=\\\"\\\$(cmdline DATA)\\\"
+test -z \\\"\\\$SRC\\\" && SRC=\\\"\\\${BIPATH%/*}\\\"
+test -z \\\"\\\$SRC\\\" && exit
+test -z \\\"\\\$DATA\\\" && DATA=data
+
+inode_data1=\\\$(ls -id \\\"\\\$MAGISKTMP/.magisk/mirror/data/\\\$SRC/\\\$DATA\\\" | awk '{ print \\\$1 }')
+inode_data2=\\\$(ls -id \\\"\\\$MAGISKTMP/.magisk/mirror/data/\\\$SRC/data\\\" | awk '{ print \\\$1 }')
+inode_data=\\\$(ls -id \\\"/data\\\" | awk '{ print \\\$1 }')
+
+if [ \\\"\\\$inode_data1\\\" == \\\"\\\$inode_data\\\" ]; then
+mount --bind \\\"\\\$MAGISKTMP/.magisk/mirror/data/\\\$SRC/\\\$DATA\\\" \\\"\\\$MAGISKTMP/.magisk/mirror/data\\\"
+elif [ \\\"\\\$inode_data2\\\" == \\\"\\\$inode_data\\\" ]; then
+mount --bind \\\"\\\$MAGISKTMP/.magisk/mirror/data/\\\$SRC/data\\\" \\\"\\\$MAGISKTMP/.magisk/mirror/data\\\"
+fi )
+rm -rf \\\"\\\$SCRIPT\\\"
+\" >/data/adb/post-fs-data.d/fix_mirror_mount.sh
+echo \"
+SCRIPT=\\\"\\\$0\\\"
+MAGISKTMP=\\\$(magisk --path) || MAGISKTMP=/sbin
+set -x
+exec 2>>\\\"\\\$MAGISKTMP/emu/record_logs.txt\\\"
+inode_data1=\\\$(ls -id \\\"\\\$MAGISKTMP/.magisk/mirror/data/adb/modules\\\" | awk '{ print \\\$1 }')
+inode_data2=\\\$(ls -id \\\"\\\$MAGISKTMP/.magisk/modules\\\" | awk '{ print \\\$1 }')
+inode_data=\\\$(ls -id \\\"/data/adb/modules\\\" | awk '{ print \\\$1 }')
+
+if [ \\\"\\\$inode_data2\\\" != \\\"\\\$inode_data\\\" ]; then
+  if [ \\\"\\\$inode_data1\\\" == \\\"\\\$inode_data\\\" ]; then
+    mount --bind \\\"\\\$MAGISKTMP/.magisk/mirror/data/adb/modules\\\" \\\"\\\$MAGISKTMP/.magisk/modules\\\"
+  fi
+fi
+
+
+rm -rf \\\"\\\$SCRIPT\\\"\" >/data/adb/service.d/fix_modules_not_show.sh
+chmod 755 /data/adb/service.d/fix_modules_not_show.sh
+chmod 755 /data/adb/post-fs-data.d/fix_mirror_mount.sh; )"
+
+
+EXPORT_PATH="export PATH /sbin:/system/bin:/system/xbin:/vendor/bin:/gearlock/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin"
+
+
+magiskloader="
+
+         on early-init
+             $EXPORT_PATH
+              
+
+          on post-fs-data
+$RM_RUSTY_MAGISK
+              start logd
+              start adbd
+              rm /dev/.magisk_unblock
+              exec u:r:su:s0 root root -- $MAGISKBASE/busybox sh -o standalone $MAGISKBASE/overlay.sh
+              exec u:r:magisk:s0 root root -- $MAGISKTMP/magisk --daemon
+              start $magisk_postfsdata
+              # wait all magisk post-fs-data jobs are completed or 40s  has passed
+              wait /dev/.magisk_unblock 40
+              rm /dev/.magisk_unblock
+
+          service $magisk_postfsdata $MAGISKTMP/magisk --post-fs-data
+              user root
+              seclabel u:r:magisk:s0
+              oneshot
+
+          service $magisk_service $MAGISKTMP/magisk --service
+              class late_start
+              user root
+              seclabel u:r:magisk:s0
+              oneshot
+
+          on property:sys.boot_completed=1
+              $umount_sbin
+              start $magisk_boot_complete
+# remove magisk service traces from some detection
+# although detect modified init.rc is not always correct
+              exec u:r:magisk:s0 root root -- $MAGISKTMP/magisk resetprop --delete init.svc.$magisk_postfsdata
+              exec u:r:magisk:s0 root root -- $MAGISKTMP/magisk resetprop --delete init.svc.$magisk_service
+              exec u:r:magisk:s0 root root -- $MAGISKTMP/magisk resetprop --delete init.svc.$magisk_boot_complete
+              exec u:r:magisk:s0 root root -- $MAGISKTMP/magisk resetprop --delete init.svc_debug_pid.$magisk_postfsdata
+              exec u:r:magisk:s0 root root -- $MAGISKTMP/magisk resetprop --delete init.svc_debug_pid.$magisk_service
+              exec u:r:magisk:s0 root root -- $MAGISKTMP/magisk resetprop --delete init.svc_debug_pid.$magisk_boot_complete
+              exec u:r:magisk:s0 root root -- $MAGISKTMP/busybox sh -o standalone $MAGISKTMP/emu/magisksu_survival.sh
+          service $magisk_boot_complete $MAGISKTMP/magisk --boot-complete
+              user root
+              seclabel u:r:magisk:s0
+              oneshot"
+
+
+overlay_loader="#!$MAGISKBASE/busybox sh
+
+export PATH=/sbin:/system/bin:/system/xbin
+
+
+mnt_tmpfs(){ (
+# MOUNT TMPFS ON A DIRECTORY
+MOUNTPOINT=\"\$1\"
+mkdir -p \"\$MOUNTPOINT\"
+mount -t tmpfs -o \"mode=0755\" tmpfs \"\$MOUNTPOINT\" 2>/dev/null
+) }
+
+
+
+mnt_bind(){ (
+# SHORTCUT BY BIND MOUNT
+FROM=\"\$1\"; TO=\"\$2\"
+if [ -L \"\$FROM\" ]; then
+SOFTLN=\"\$(readlink \"\$FROM\")\"
+ln -s \"\$SOFTLN\" \"\$TO\"
+elif [ -d \"\$FROM\" ]; then
+mkdir -p \"\$TO\" 2>/dev/null
+mount --bind \"\$FROM\" \"\$TO\"
+else
+echo -n 2>/dev/null >\"\$TO\"
+mount --bind \"\$FROM\" \"\$TO\"
+fi
+) }
+
+
+exit_magisk(){
+umount -l $MAGISKTMP
+echo -n >/dev/.magisk_unblock
+}
+
+
+API=\$(getprop ro.build.version.sdk)
+  ABI=\$(getprop ro.product.cpu.abi)
+  if [ \"\$ABI\" = \"x86\" ]; then
+    ARCH=x86
+    ABI32=x86
+    IS64BIT=false
+  elif [ \"\$ABI\" = \"arm64-v8a\" ]; then
+    ARCH=arm64
+    ABI32=armeabi-v7a
+    IS64BIT=true
+  elif [ \"\$ABI\" = \"x86_64\" ]; then
+    ARCH=x64
+    ABI32=x86
+    IS64BIT=true
+  else
+    ARCH=arm
+    ABI=armeabi-v7a
+    ABI32=armeabi-v7a
+    IS64BIT=false
+  fi
+
+magisk_name=\"magisk32\"
+[ \"\$IS64BIT\" == true ] && magisk_name=\"magisk64\"
+
+# umount previous /sbin tmpfs overlay
+
+count=0
+( magisk --stop ) &
+
+# force umount /sbin tmpfs
+
+until ! mount | grep -q \" /sbin \"; do
+[ "$count" -gt "10" ] && break
+umount -l /sbin 2>/dev/null
+sleep 0.1
+count=$(($count+1))
+test ! -d /sbin && break
+done
+
+# mount magisk tmpfs path
+
+$mount_sbin
+
+MAGISKTMP=$MAGISKTMP
+chmod 755 \"\$MAGISKTMP\"
+set -x
+mkdir -p \$MAGISKTMP/.magisk
+mkdir -p \$MAGISKTMP/emu
+exec 2>>\$MAGISKTMP/emu/record_logs.txt
+exec >>\$MAGISKTMP/emu/record_logs.txt
+
+cd $MAGISKBASE 
+
+test ! -f \"./\$magisk_name\" && { echo -n >/dev/.overlay_unblock; exit_magisk; exit 0; }
+
+
+MAGISKBIN=/data/adb/magisk
+mkdir /data/unencrypted
+for mdir in modules post-fs-data.d service.d magisk; do
+test ! -d /data/adb/\$mdir && rm -rf /data/adb/\$mdir
+mkdir /data/adb/\$mdir 2>/dev/null
+done
+for file in magisk32 magisk64 magiskinit magiskpolicy; do
+  cp -af ./\$file \$MAGISKTMP/\$file 2>/dev/null
+  chmod 755 \$MAGISKTMP/\$file
+  cp -af ./\$file \$MAGISKBIN/\$file 2>/dev/null
+  chmod 755 \$MAGISKBIN/\$file
+done
+cp -af ./magiskboot \$MAGISKBIN/magiskboot
+cp -af ./busybox \$MAGISKBIN/busybox
+cp -af ./busybox \$MAGISKTMP
+chmod 755 \$MAGISKTMP/busybox
+\$MAGISKTMP/busybox --install -s \$MAGISKTMP
+cp -af ./assets/* \$MAGISKBIN
+
+# create symlink / applet
+
+ln -s ./\$magisk_name \$MAGISKTMP/magisk 2>/dev/null
+ln -s ./magisk \$MAGISKTMP/su 2>/dev/null
+ln -s ./magisk \$MAGISKTMP/resetprop 2>/dev/null
+ln -s ./magisk \$MAGISKTMP/magiskhide 2>/dev/null
+[ ! -f \"\$MAGISKTMP/magiskpolicy\" ] && ln -s ./magiskinit \$MAGISKTMP/magiskpolicy 2>/dev/null
+ln -s ./magiskpolicy \$MAGISKTMP/supolicy 2>/dev/null
+
+mkdir -p \$MAGISKTMP/.magisk/mirror
+mkdir \$MAGISKTMP/.magisk/block
+
+touch \$MAGISKTMP/.magisk/config
+
+cd \$MAGISKTMP
+# SELinux stuffs
+if [ -f /vendor/etc/selinux/precompiled_sepolicy ]; then
+  ./magiskpolicy --load /vendor/etc/selinux/precompiled_sepolicy --live --magisk 2>&1
+elif [ -f /sepolicy ]; then
+  ./magiskpolicy --load /sepolicy --live --magisk 2>&1
+else
+  ./magiskpolicy --live --magisk 2>&1
+fi
+
+#remount system read-only to fix Magisk fail to mount mirror
+
+$remove_backup
+mount -o ro,remount /
+mount -o ro,remount /system
+mount -o ro,remount /vendor
+mount -o ro,remount /product
+mount -o ro,remount /system_ext
+
+restorecon -R /data/adb/magisk
+
+$ADDITIONAL_SCRIPT
+$LOAD_MODULES_POLICY
+
+[ ! -f \"\$MAGISKTMP/magisk\" ] && exit_magisk
+
+# unmount patched files
+
+umount -l /system/etc/init
+umount -l /init.rc
+umount -l /system/etc/init/hw/init.rc
+umount -l /sepolicy
+umount -l /system/vendor/etc/selinux/precompiled_sepolicy
+"
+
+cd "$JOBPWD"
+}
+
+extract_magisk_apk(){
+
+[ "$IS64BIT" == "true" ] && mkdir -p "$TMPDIR/magisk32"
+mkdir -p "$TMPDIR/magisk"
+mkdir -p "$TMPDIR/magisktool"
+ 
+
+unzip -oj "$APKFILE" "lib/$ABI/*" -d "$TMPDIR/magisk" &>/dev/null
+chmod -R 777 "$TMPDIR/magisk"
+ln -s "./libmagiskinit.so" "$TMPDIR/magisk/magiskinit"
+
+if [ "$IS64BIT" == "true" ]; then
+unzip -oj "$APKFILE" "lib/$ABI32/*" -d "$TMPDIR/magisk32" &>/dev/null
+ln -s "./libmagiskinit.so" "$TMPDIR/magisk32/magiskinit"
+chmod -R 777 "$TMPDIR/magisk32"
+fi
+
+rm -rf "$MAGISKCORE/.rw" 2>/dev/null
+touch "$MAGISKCORE/.rw" 2>/dev/null  || abortc light_red "$text_cannot_install_magisk"
+rm -rf "$MAGISKCORE/.rw" 2>/dev/null
+
+for file in magisk32 magisk64 magiskinit busybox; do
+rm -rf $MAGISKCORE/$file
+done
+
+( cd "$TMPDIR/magisk"
+for file in lib*.so; do
+  chmod 755 $file
+  cp -f "$file" "$MAGISKCORE/${file:3:${#file}-6}" && echo "  add magisk binary: ${file:3:${#file}-6}"
+done
+
+if [ "$IS64BIT" == "true" ]; then
+cd "$TMPDIR/magisk32"
+for file in lib*.so; do
+  chmod 755 $file
+  [ ! -f "$MAGISKCORE/${file:3:${#file}-6}" ] && cp -f "$file" "$MAGISKCORE/${file:3:${#file}-6}" && echo "  add magisk binary: ${file:3:${#file}-6}"
+done
+
+fi
+
+if [ ! -f "$MAGISKCORE/magisk64" ] && [ "$IS64BIT" == "true" ]; then
+"$TMPDIR/magisk/magiskinit" -x magisk "$MAGISKCORE/magisk64" && echo "  add magisk binary: magisk64"
+fi
+
+if [ ! -f "$MAGISKCORE/magisk32" ]; then
+    whatmagisk="magisk"
+    [ "$IS64BIT" == "true" ] && whatmagisk="magisk32"
+"$TMPDIR/$whatmagisk/magiskinit" -x magisk "$MAGISKCORE/magisk32" && echo "  add magisk binary: magisk32"
+fi
+
+)
+
+mkdir -p "$MAGISKCORE/assets"
+unzip -oj "$APKFILE" 'assets/*' -x 'assets/chromeos/*' -d "$MAGISKCORE/assets" &>/dev/null
+
+}
+
+unpatch_ramdisk(){
+RAMDISK="$1"
+REPLACE_CURRENT="$2"
+
+#magisk in ramdisk
+
+MAGISKBASE="/magisk"
+
+echo "******************************"
+echo "      Magisk uninstaller"
+echo "******************************"
+
+rm -rf "$TMPDIR"
+mkdir -p "$TMPDIR"
+[ ! -f "$RAMDISK" ] && abortc light_red "! Ramdisk does not exist!"
+
+echo "- $text_unpack_ramdisk"
+mkdir -p "$TMPDIR/ramdisk"
+
+( cd "$TMPDIR/ramdisk" && zcat "$RAMDISK" | cpio -iud ) || abortc light_red "! $text_unpack_ramdisk_fail"
+echo "- $text_unpatch_ramdisk"
+# restore init.rc
+if [ -f "$TMPDIR/ramdisk/magisk/init.rc" ]; then
+# found init.rc backup!
+cat "$TMPDIR/ramdisk/magisk/init.rc" >"$TMPDIR/ramdisk/init.rc"
+elif [ -f "$TMPDIR/ramdisk/scripts/999_magisk" ]; then
+rm -rf "$TMPDIR/ramdisk/scripts/999_magisk"
+else
+abortc light_red "$text_backup_not_exist" 2
+fi
+
+rm -rf "$TMPDIR/ramdisk/magisk"
+echo "- $text_repack_ramdisk"
+NEWRAMDISK="/sdcard/Magisk/unpatch_ramdisk_$RANDOM$RANDOM.img"
+if [ "$REPLACE_CURRENT" != "true" ]; then
+mkdir -p "/sdcard/Magisk" 2>/dev/null
+echo "- $text_new_ramdisk"
+echo "  $NEWRAMDISK"
+else
+[ -f "${RAMDISK}.bak" ] || mv "${RAMDISK}" "${RAMDISK}.bak"
+NEWRAMDISK="$RAMDISK"
+fi
+( cd "$TMPDIR/ramdisk" && find * | cpio -o -H newc | gzip >$NEWRAMDISK ) || abortc light_red "! $text_repack_ramdisk_fail" 2
+rm -rf /data/.magisk_binary 2>/dev/null
+clean_flash
+echo "- $text_done"
+true
+
+
+}
+
+check_magisk_apk(){
+[ ! -f "$APKFILE" ] && abortc light_red "! File does not exist"
+unzip -oj "$APKFILE" 'assets/util_functions.sh' -d "$TMPDIR" &>/dev/null
+
+MAGISK_VER=""
+MAGISK_VER_CODE=""
+[ -f "$TMPDIR/util_functions.sh" ] || abortc light_red "This apk is not Magisk app" 2
+MAGISK_VERINFO="$( . $TMPDIR/util_functions.sh; echo "$MAGISK_VER $MAGISK_VER_CODE"; )"
+MAGISK_VER="$(echo "$MAGISK_VERINFO" | awk '{ print $1 }')"
+MAGISK_VER_CODE="$(echo "$MAGISK_VERINFO" | awk '{ print $2 }')"
+pd green "** Magisk version: $MAGISK_VER ($MAGISK_VER_CODE)"
+}
+
+patch_ramdisk(){
+RAMDISK="$1"
+REPLACE_CURRENT="$2"
+
+#magisk in ramdisk
+
+MAGISKBASE="/magisk"
+
+echo "******************************"
+echo "      Magisk installer"
+echo "******************************"
+
+rm -rf "$TMPDIR"
+mkdir -p "$TMPDIR"
+
+
+[ ! -f "$RAMDISK" ] && abortc light_red "! Ramdisk does not exist!"
+
+check_magisk_apk
+
+echo "- $text_unpack_ramdisk"
+
+#unpack ramdisk to TMPDIR
+
+mkdir -p "$TMPDIR/ramdisk"
+
+( cd "$TMPDIR/ramdisk" && zcat "$RAMDISK" | cpio -iud ) || abortc light_red "! $text_unpack_ramdisk_fail"
+echo "- $text_patch_ramdisk"
+# ramdisk was unpack to $TMPDIR/ramdisk
+if [ -f "$TMPDIR/ramdisk/init.rc" ]; then
+magisk_loader 3
+
+if file "$TMPDIR/ramdisk/init" | grep "x86" | grep -q "32-bit"; then
+    ARCH=x86
+    ABI32=x86
+    IS64BIT=false
+    ABI=x86
+  elif file "$TMPDIR/ramdisk/init" | grep "arm64" | grep -q "64-bit"; then
+    ARCH=arm64
+    ABI32=armeabi-v7a
+    IS64BIT=true
+    ABI=arm64-v8a
+  elif file "$TMPDIR/ramdisk/init" | grep "x86-64" | grep -q "64-bit"; then
+    ARCH=x64
+    ABI32=x86
+    IS64BIT=true
+    ABI=x86_64
+  else
+    ARCH=arm
+    ABI=armeabi-v7a
+    ABI32=armeabi-v7a
+    IS64BIT=false
+  fi
+echo "- ${text_magisk_tmpfs_directory}: $MAGISKTMP"
+echo "- ARCH: $ARCH, 64-bit: $IS64BIT"
+
+mkdir "$TMPDIR/ramdisk/magisk"
+if [ -f "$TMPDIR/ramdisk/magisk/init.rc" ]; then
+# found init.rc backup!
+cat "$TMPDIR/ramdisk/magisk/init.rc" >"$TMPDIR/ramdisk/init.rc"
+echo "- $text_magisk_patched_ramdisk"
+echo "$magiskloader" >>"$TMPDIR/ramdisk/init.rc"
+else
+# no backup init
+cp "$TMPDIR/ramdisk/init.rc" "$TMPDIR/ramdisk/magisk/init.rc"
+echo "$magiskloader" >>"$TMPDIR/ramdisk/init.rc"
+fi
+elif [ -d "$TMPDIR/ramdisk/scripts" ]; then
+# this maybe initrd.img
+MAGISKBASE=MAGISK_FILES_BASE
+magisk_loader 3
+    ARCH=x64
+    ABI32=x86
+    IS64BIT=true
+    ABI=x86_64
+mkdir "$TMPDIR/ramdisk/magisk"
+rm -rf "$TMPDIR/ramdisk/magisk/magisk.rc"
+echo "$magiskloader" >>"$TMPDIR/ramdisk/magisk/magisk.rc"
+rm -rf "$TMPDIR/ramdisk/scripts/999_magisk"
+echo "if mount -t tmpfs | grep -q \" /android \" || mount -t rootfs | grep -q \" /android \"; then
+# rootfs, hook into /init.rc directly
+mount -o rw,remount /android
+mkdir /android/magisk
+sed -i \"s|MAGISK_FILES_BASE|/magisk|g\" /magisk/overlay.sh
+sed -i \"s|MAGISK_FILES_BASE|/magisk|g\" /magisk/magisk.rc
+cp -a /magisk/* /android/magisk
+[ ! -f \"/magisk/init.rc\" ] && cat /init.rc >/magisk/init.rc
+[ -f \"/magisk/init.rc\" ] && cat /magisk/init.rc >/init.rc
+cat /magisk/magisk.rc >>/android/init.rc
+else
+sysblock=\"\$(mount | grep \" /android \" | tail -1 | awk '{ print \$1 }')\"
+mkdir /system_root
+mount \$sysblock /system_root
+# prepare for second stage
+inittmp=/android/dev
+mount -t tmpfs tmpfs \$inittmp
+chmod 750 \$inittmp
+mkdir -p \$inittmp/.overlay/upper
+mkdir -p \$inittmp/.overlay/work
+mount -t overlay tmpfs -o lowerdir=/android/system/etc/init,upperdir=\$inittmp/.overlay/upper,workdir=\$inittmp/.overlay/work /android/system/etc/init
+sed -i \"s|MAGISK_FILES_BASE|/system/etc/init/magisk|g\" /magisk/overlay.sh
+sed -i \"s|MAGISK_FILES_BASE|/system/etc/init/magisk|g\" /magisk/magisk.rc
+cp -a /magisk \$inittmp/.overlay/upper
+cp /magisk/magisk.rc \$inittmp/.overlay/upper/magisk.rc
+fi
+[ ! -d \"/magisk/magiskpolicy\" ] && ln -sf ./magiskinit /magisk/magiskpolicy
+
+bind_policy(){
+policy=\"\$1\"
+/magisk/magiskpolicy --load \"\$policy\" --save \$inittmp/.overlay/policy --magisk \"allow * magisk_file lnk_file *\"
+mount --bind \$inittmp/.overlay/policy \"\$policy\"
+}
+
+
+if [ -f /android/system/vendor/etc/selinux/precompiled_sepolicy ]; then
+  bind_policy /android/system/vendor/etc/selinux/precompiled_sepolicy
+elif [ -f /android/sepolicy ]; then
+  bind_policy /android/sepolicy
+fi
+umount -l \$inittmp
+" >"$TMPDIR/ramdisk/scripts/999_magisk"
+else
+abortc light_red "! Unknown ramdisk structure"
+fi
+rm -rf "$TMPDIR/ramdisk/magisk/overlay.sh"
+echo "$overlay_loader" >"$TMPDIR/ramdisk/magisk/overlay.sh"
+echo "( mount -o rw,remount /
+rm -rf /magisk
+mount -o ro,remount / ) &" >>"$TMPDIR/ramdisk/magisk/overlay.sh"
+chmod 755 "$TMPDIR/ramdisk/init.rc"
+( MAGISKCORE="$TMPDIR/ramdisk/magisk"; IS64BIT=true; extract_magisk_apk )
+chmod -R 777 "$TMPDIR/ramdisk/magisk"
+echo "- $text_repack_ramdisk"
+NEWRAMDISK="/sdcard/Magisk/magisk_ramdisk_$RANDOM$RANDOM.img"
+if [ "$REPLACE_CURRENT" != "true" ]; then
+mkdir -p "/sdcard/Magisk" 2>/dev/null
+echo "- $text_new_ramdisk:"
+echo "  $NEWRAMDISK"
+else
+[ -f "${RAMDISK}.bak" ] || mv "${RAMDISK}" "${RAMDISK}.bak"
+NEWRAMDISK="$RAMDISK"
+fi
+( cd "$TMPDIR/ramdisk" && find * | cpio -o -H newc | gzip >$NEWRAMDISK ) || abortc light_red "! $text_repack_ramdisk_fail"
+rm -rf /data/.magisk_binary
+clean_flash
+echo "- $text_done"
+true
+}
+
+
+update_magiskbin(){
+need_root_access
+rm -rf /data/.magisk_binary
+mkdir -p /data/.magisk_binary
+rm -rf "$TMPDIR"
+mkdir -p "$TMPDIR"
+check_magisk_apk
+
+( MAGISKCORE="/data/.magisk_binary"; extract_magisk_apk
+mkdir -p $MAGISKBIN 2>/dev/null
+unzip -oj "$APKFILE" 'assets/*' -x 'assets/chromeos/*' -d $MAGISKBIN &>/dev/null
+mkdir $NVBASE/modules 2>/dev/null
+mkdir $POSTFSDATAD 2>/dev/null
+mkdir $SERVICED 2>/dev/null )
+
+chmod -R 750 /data/.magisk_binary
+clean_flash
+
+}
+
+extension_info(){
+cat <<EOF
+#######################################################################################################
+#####=============================== Package/Extension Information ===============================#####
+NAME="Magisk_extension" #Package/Extension Name
+
+TYPE="Extension" #Specify (Package / Extension)
+
+AUTHOR="HuskyDG" #Your name as the Developer/Owner/Packer
+
+VERSION="$MAGISK_VER" #Specify the Version of this package/extension
+
+SHORTDESC="An extension to provide Magisk for Android x86" #Provide a short description about this package/extension
+
+C_EXTNAME="Magisk_extension" #For Specifing a custom name for your extension script (\$NAME is used if not defined)
+#######################################################################################################
+######=============================== Package/Extension Functions ===============================######
+
+REQSYNC="yes" #Require Sync (Deafult - yes)
+
+REQREBOOT="no" #(Deafult - no) Use if your package/extension modifies any major system file
+
+GEN_UNINS="yes" #(Deafult - yes) If you want GearLock to generate a uninstallation script itself
+
+SHOW_PROG="yes" #(Default - yes) Whether to show extraction progress while loading the pkg/extension
+
+DEF_HEADER="yes" #(Default -yes) Whether to use the default header which print's the info during zygote
+
+######=============================== Package/Extension Functions ===============================######
+#######################################################################################################
+EOF
+}
+
+extension_unins(){
+cat <<EOF
+
+
+GEARHOME="\$GHOME"
+GEARBOOT="\$GEARHOME/gearboot/overlay/magisk"
+
+rm -rf "\$GEARHOME/gearboot/overlay/rusty-magisk"
+rm -rf "\$GEARBOOT" 2>/dev/null
+rm -rf "\$GEARHOME/.local/magisk" 2>/dev/null
+rm -rf \$GEARHOME/unins/Magisk_* 2>/dev/null
+rm -rf \\
+/cache/*magisk* /cache/unblock /data/*magisk* /data/cache/*magisk* /data/property/*magisk* \\
+/data/Magisk.apk /data/busybox /data/custom_ramdisk_patch.sh /data/adb/*magisk* \\
+/data/adb/post-fs-data.d /data/adb/service.d /data/adb/modules* \\
+/data/unencrypted/magisk /metadata/magisk /persist/magisk /mnt/vendor/persist/magisk /data/.magisk_binary /magisk \\
+/data/ghome/unins/Magisk_* /system/ghome/unins/Magisk_*
+if test "\$BOOTCOMP" == "yes"; then
+echo "- The device will reboot after a few seconds"
+(sleep 8; reboot) &
+fi
+
+EOF
+}
+
+
+install_magisk_gearlock(){
+echo "******************************"
+echo "      Magisk installer"
+echo "******************************"
+SYSTEMLESS=true
+GEARHOME=/data/ghome
+if [ -d "$GEARHOME" ]; then
+true # stub
+elif [ -d "/system/ghome" ]; then
+GEARHOME="/system/ghome"
+SYSTEMLESS=false
+else
+abortc light_red "$text_install_gearlock !"
+fi
+GEARBOOT="$GEARHOME/gearboot/overlay/magisk/init"
+echo "- GearLock Home: $GEARHOME"
+$SYSTEMLESS && echo "- Systemless mode!"
+GEARLOCK=true
+mkdir -p "$TMPDIR"
+INITRC=/init.rc
+INITRC2=/system/etc/init/hw/init.rc
+rm -rf "$GEARHOME/gearboot/overlay/rusty-magisk"
+GEAR_INITDIR="$GEARBOOT"
+if [ ! -f "$INITRC" ]; then
+# Android 11 new init.rc
+INITRC="$INITRC2"
+GEAR_INITDIR="$GEARBOOT/system/etc/init/hw"
+fi
+NEW_INITRC="$GEAR_INITDIR/init.rc"
+rm -rf "$GEARBOOT"
+mkdir -p "$GEAR_INITDIR"
+first_setup
+rm -rf $GEARHOME/unins/Magisk_* 2>/dev/null
+
+
+echo "$(extension_info)
+
+do_unins_custom(){
+$(extension_unins)
+}">"$GEARHOME/unins/Magisk_extension_$MAGISK_VER"
+setup_magisk_env
+echo "- $text_install Magisk loader..."
+rm -rf $MAGISKCORE/overlay.sh
+echo "$overlay_loader" >"$MAGISKCORE/overlay.sh"
+touch "$GEARBOOT/init.superuser.rc"
+cp "$INITRC" "$NEW_INITRC"
+echo "$magiskloader" >>"$NEW_INITRC"
+clean_flash
+echo "- $text_done"
+}
+
+first_setup(){
+need_root_access
+
+check_magisk_apk
+
+MAGISKBASE="/system/etc/init/magisk"
+
+
+if [ "$GEARLOCK" == "true" ]; then
+MAGISKBASE="$GEARHOME/.local/magisk"
+MAGISKCORE="$GEARHOME/.local/magisk"
+fi
+
+magisk_loader 3
+
+echo "- ${text_magisk_tmpfs_directory}: $MAGISKTMP"
+rm -rf "$MAGISKCORE"
+mkdir -p "$MAGISKCORE"
+}
+
+
+
+setup_magisk_env(){
+
+echo "- $text_extract_magisk_apk"
+
+extract_magisk_apk
+
+}
+
+
+
+
+build_gxp(){
+GEARLOCK=true
+echo "******************************"
+echo "      Magisk installer"
+echo "******************************"
+get_tmpdir
+MAGISKBASE="PLACEHOLDER_MAGISKBASE"
+MAGISKCORE="$TMPDIR/gxp/gearlock/magisk"
+rm -rf "$TMPDIR"
+mkdir -p "$MAGISKCORE"
+check_magisk_apk
+magisk_loader 3
+echo "- ${text_magisk_tmpfs_directory}: $MAGISKTMP"
+unzip -o "$gxp_template" -d "$TMPDIR/gxp" &>/dev/null
+extract_magisk_apk
+echo "- $text_install Magisk loader..."
+rm -rf $MAGISKCORE/overlay.sh
+echo "$overlay_loader" >"$MAGISKCORE/overlay.sh"
+rm -rf "$TMPDIR/gxp/gearlock/magisk.rc"
+echo "$magiskloader" >"$TMPDIR/gxp/gearlock/magisk.rc"
+extension_info > "$TMPDIR/gxp/!zygote.sh"
+extension_unins >"$TMPDIR/gxp/uninstall.sh"
+echo "- $text_building_gxp"
+cd "$TMPDIR/gxp" || abortc light_red "$text_cannot_install_magisk"
+libzip.so -r "$TMPDIR/gxp.zip" "./" &>/dev/null
+[ ! -d "/sdcard/Magisk" ] && rm -rf "/sdcard/Magisk"
+mkdir -p "/sdcard/Magisk"
+EXTENSION_ZIP="/sdcard/Magisk/magisk-extension-$MAGISK_VER.gxp"
+rm -rf "$EXTENSION_ZIP"
+cp "$TMPDIR/gxp.zip" "$EXTENSION_ZIP" || abortc light_red "$text_grant_inter_access_permission"
+echo "- $text_saved_magisk_gxp_to"
+echo "  $EXTENSION_ZIP"
+clean_flash
+echo "- $text_done"
+
+}
+
+
+
+
+install_magisk(){
+GEARLOCK=false
+
+echo "******************************"
+echo "      Magisk installer"
+echo "******************************"
+
+first_setup
+
+echo "- $text_mount_rw_system"
+mount_rw_system
+$IS_SYSTEM_MOUNT || abortc "light_red" "! $text_failed_mount_system"
+
+umount -l /system/bin
+umount -l /system/bin/*
+
+echo "- $text_setup"
+rm -rf "$MAGISKCORE"
+mkdir -p "$MAGISKCORE"
+chown root:root "$MAGISKCORE"
+chmod 750 "$MAGISKCORE"
+
+setup_magisk_env
+
+
+echo "- $text_install Magisk loader..."
+rm -rf $MAGISKCORE/overlay.sh
+echo "$overlay_loader" >"$MAGISKCORE/overlay.sh"
+rm -rf "/system/etc/init/magisk.rc"
+echo "$magiskloader" >"/system/etc/init/magisk.rc"
+echo "- $text_mount_ro_system"
+mount_ro_system
+
+clean_flash
+echo "- $text_done"
+}
+
+
+
+
+uninstall_magisk(){
+echo "******************************"
+echo "      Magisk uninstaller"
+echo "******************************"
+need_root_access
+FOUND_MAGISK=false
+SYSTEMLESS=true
+FILE_LIST1="
+/data/ghome/gearboot/overlay/magisk
+/data/ghome/gearboot/overlay/rusty-magisk
+/data/ghome/.local/magisk
+"
+
+for file in $FILE_LIST1; do
+test -d $file && FOUND_MAGISK=true
+done
+
+FILE_LIST2="
+/system/ghome/gearboot/overlay/rusty-magisk
+/system/ghome/gearboot/overlay/magisk
+/system/ghome/.local/magisk
+/system/etc/init/magisk
+/system/etc/magisk
+"
+
+for file in $FILE_LIST2; do
+test -d $file && FOUND_MAGISK=true && SYSTEMLESS=false
+done
+
+$FOUND_MAGISK || abortc light_red "$text_uninstall_fail"
+
+if [ "$SYSTEMLESS" == "false" ]; then
+echo "- $text_mount_rw_system"
+mount_rw_system
+$IS_SYSTEM_MOUNT || abortc "light_red" "! $text_failed_mount_system"
+
+MAGISKCOREDIR=/system/etc/init/magisk
+
+rm -rf "$MAGISKCOREDIR/.rw" 2>/dev/null
+touch "$MAGISKCOREDIR/.rw" 2>/dev/null  || abortc light_red "$text_system_not_writeable"
+rm -rf "$MAGISKCOREDIR/.rw" 2>/dev/null
+
+fi
+
+echo "- $text_uninstalling_magisk..."
+
+for fun in $FILE_LIST1 $FILE_LIST2 /system/etc/init/magisk.rc; do
+rm -rf "$fun"
+done
+
+
+
+if $REMOVE_MAGISK_DATA; then
+
+ADDOND=/system/addon.d/99-magisk.sh
+if [ -f $ADDOND ]; then
+  rm -f "/$ADDOND"
+fi
+echo "- $text_rm_magisk_files"
+rm -rf \
+/cache/*magisk* /cache/unblock /data/*magisk* /data/cache/*magisk* /data/property/*magisk* \
+/data/Magisk.apk /data/busybox /data/custom_ramdisk_patch.sh /data/adb/*magisk* \
+/data/adb/post-fs-data.d /data/adb/service.d /data/adb/modules* \
+/data/unencrypted/magisk /metadata/magisk /persist/magisk /mnt/vendor/persist/magisk /data/.magisk_binary /magisk \
+/data/ghome/unins/Magisk_* /system/ghome/unins/Magisk_*
+
+if [ "$SYSTEMLESS" == "false" ]; then
+echo "- $text_mount_ro_system"
+mount_ro_system
+fi
+cd /
+  echo "********************************************"
+  warn_reboot
+  echo "********************************************"
+(sleep 8; /system/bin/reboot)&
+fi
+echo "- $text_done"
+
+}
+
+
+unsu(){
+clear
+ui_print " ";
+echo "******************************"
+ui_print "unSU Script";
+ui_print "by osm0sis @ xda-developers"; #keep credit
+echo "******************************"
+echo "- $text_mount_rw_system"
+mount_rw_system
+$IS_SYSTEM_MOUNT || abortc "light_red" "! $text_failed_mount_system"
+
+mount --bind /system /system
+
+rm -rf "/system/.rw" 2>/dev/null
+touch "/system/.rw" 2>/dev/null  || { umount -l /system; abortc light_red "$text_system_not_writeable"; }
+rm -rf "/system/.rw" 2>/dev/null
+
+
+if [ -e /data/su ]; then
+  ui_print "Removing phh's SuperUser...";
+  rm -rf /data/app/me.phh.superuser* /data/data/me.phh.superuser* /data/su;
+  bootmsg=1;
+fi;
+
+
+if [ -e /cache/su.img -o -e /data/su.img ]; then
+  ui_print "Removing SuperSU Systemless (su.img)...";
+  umount /su;
+  rm -rf /cache/su.img /data/su.img /data/adb/suhide;
+  bootmsg=1;
+  supersu=1;
+fi;
+
+bindsbin=$(dirname `find /data -name supersu_is_here | head -n1`);
+if [ -e "$bindsbin" ]; then
+  ui_print "Removing SuperSU Systemless (BINDSBIN at $bindsbin)...";
+  rm -rf $bindsbin /data/app/eu.chainfire.suhide* /data/user*/*/eu.chainfire.suhide*;
+  bootmsg=1;
+  supersu=1;
+fi;
+
+if [ -e /system/bin/.ext/.su ]; then
+  ui_print "Removing SuperSU...";
+  mount -o rw,remount /system;
+
+  rm -rf /system/.pin /system/.supersu \
+         /system/app/Superuser.apk /system/app/SuperSU \
+         /system/bin/.ext /system/bin/app_process_init \
+         /system/etc/.installed_su_daemon /system/etc/install-recovery.sh /system/etc/init.d/99SuperSUDaemon \
+         /system/lib/libsupol.so /system/lib64/libsupol.so /system/su.d \
+         /system/xbin/daemonsu /system/xbin/su /system/xbin/sugote /system/xbin/sugote-mksh /system/xbin/supolicy;
+
+  mv -f /system/bin/app_process32_original /system/bin/app_process32;
+  mv -f /system/bin/app_process64_original /system/bin/app_process64;
+  mv -f /system/bin/install-recovery_original.sh /system/bin/install-recovery.sh;
+
+  cd /system/bin;
+  if [ -e app_process64 ]; then
+    ln -sf app_process64 app_process;
+  elif [ -e app_process32 ]; then
+    ln -sf app_process32 app_process;
+  fi;
+  supersu=1;
+fi;
+
+if [ "$supersu" ]; then
+  rm -rf /cache/.supersu /cache/SuperSU.apk \
+         /data/.supersu /data/SuperSU.apk \
+         /data/app/eu.chainfire.supersu* /data/user*/*/eu.chainfire.supersu*;
+fi;
+
+if [ -e /system/bin/su -a "$(strings /system/xbin/su | grep koush)" ]; then
+  ui_print "Removing Koush's SuperUser...";
+  mount -o rw,remount /system;
+
+  rm -rf /system/app/Superuser.apk /system/bin/su \
+         /system/etc/.has_su_daemon /system/etc/.installed_su_daemon /system/xbin/su \
+         /cache/su /cache/Superuser.apk /cache/install-recovery-sh \
+         /data/app/com.koushikdutta.superuser* /data/user*/*/com.koushikdutta.superuser*;
+fi;
+
+if [ -e /system/addon.d/51-addonsu.sh ]; then
+  ui_print "Removing LineageOS addonsu...";
+  mount -o rw,remount /system;
+  rm -rf /system/addon.d/51-addonsu.sh /system/bin/su \
+         /system/etc/init/superuser.rc /system/xbin/su;
+fi;
+
+if [ -e /system/bin/su -o -e /system/xbin/su ]; then
+  ui_print "Removing ROM su binary...";
+  mount -o rw,remount /system;
+  rm -rf /system/bin/su /system/xbin/su;
+fi;
+umount -l /system
+echo "- $text_mount_ro_system"
+mount_ro_system
+}
+
+download_magisk_apk(){
+if [ "$install_offline" != "true" ]; then
+    
+     
+    echo "- Downloading Magisk APK..."
+    rm -rf "$DLPATH/app.tmp"
+    rm -rf "$DLPATH/app.apk"
+mirror_git="https://gh.api.99988866.xyz/"
+ 
+
+    wget -O "$DLPATH/app.tmp" "$URL" 2>/dev/null && mv -f "$DLPATH/app.tmp" "$DLPATH/app.apk" 2>/dev/null
+    [ -f "$DLPATH/app.apk" ] || wget -O "$DLPATH/app.tmp" "$mirror_git$URL" 2>/dev/null && mv -f "$DLPATH/app.tmp" "$DLPATH/app.apk" 2>/dev/null
+    [ -f "$DLPATH/app.apk" ] || abortc none "! Cannot download Magisk APK"
+    APKFILE="$DLPATH/app.apk"
+fi
+rm -rf "$DLPATH/util_functions.sh"; unzip -oj "$APKFILE" 'assets/util_functions.sh' -d "$DLPATH" &>/dev/null
+      MAGISK_VERINFO="$( . $DLPATH/util_functions.sh; echo "$MAGISK_VER $MAGISK_VER_CODE"; )"
+MAGISK_VER="$(echo "$MAGISK_VERINFO" | awk '{ print $1 }')"
+MAGISK_VER_CODE="$(echo "$MAGISK_VERINFO" | awk '{ print $2 }')"
+      [ -z "$MAGISK_VER" -o -z "$MAGISK_VER_CODE" ] && abortc light_red "This APK is not Magisk app"
+      cp -af "$APKFILE" "$DLPATH/save/$MAGISK_VER($MAGISK_VER_CODE)"
+}
+
+
+install_option_process(){
+clear
+
+( download_magisk_apk
+   install_option_method
+ )
+}
+
+install_option_method(){
+MINIMAL_MAGISK=false
+while true; do
+clear
+pd light_cyan "- Magisk build: $MAGISK_VER($MAGISK_VER_CODE)"
+nomethod=false
+print_method
+read method
+case "$method" in
+1)
+    install_command="install_magisk"
+    ;;
+2)
+    patch_ramdisk_method
+    ;;
+3)
+    gearlock_method
+    ;;
+0)
+    exit 0
+    break
+    ;;
+e)
+    [ ! -d "/sdcard/Magisk" ] && rm -rf /sdcard/Magisk
+    mkdir -p /sdcard/Magisk
+    cp "$APKFILE" "/sdcard/Magisk/Magisk-$MAGISK_VER($MAGISK_VER_CODE).apk" && pd light_green "$text_exported_apk" || pd light_red "$text_export_apk_fail"
+    nomethod=true
+    read
+    ;;
+*)
+    nomethod=true
+    ;;
+esac
+$nomethod || { clear; $install_command "$RAMDISK"; pd yellow "$text_installation_ended" ; read; }
+done
+
+}
+
+ramdisk_direct_install(){
+CONTINUE=1
+echo -n "$text_find_ramdisk_auto ? <Y/n> "
+read autom
+if [ "$autom" == "Y" -o "$autom" == "y" ]; then
+( find_ramdisk_image
+patch_ramdisk "$RAMDISK" "true" )
+test "$?" == 0 && CONTINUE=0
+umount -l /dev/os_disk_*
+echo "Unmount all disks..."
+elif ! [ "$autom" == "N" -o "$autom" == "n" ]; then
+        exit
+fi
+if [ "$CONTINUE" == "1" ]; then
+VAR_OSROOT="$(cat $DISKINFO/blockdev)"
+VAR_RAMDISK="$(cat $DISKINFO/ramdisk)"
+RAMDISK="$VAR_RAMDISK"
+if [ "$VAR_OSROOT" ] && [ "$VAR_RAMDISK" ]; then
+( echo -n "${text_use_current_ramdisk_info}? <Y/n> "
+read opt
+if [ "$opt" == "Y" -o "$opt" == "y" ]; then
+mount_disk
+( patch_ramdisk "$RAMDISK" "true" )
+ERR_CODE=$?
+umount_disk
+exit $ERR_CODE 
+elif ! [ "$opt" == "N" -o "$opt" == "n" ]; then
+        exit
+else
+exit 1
+fi )
+if [ "$?" == "1" ]; then
+table_list
+patch_ramdisk "$RAMDISK" "true"
+umount_disk
+fi
+else
+table_list
+patch_ramdisk "$RAMDISK" "true"
+umount_disk
+fi
+fi
+}
+
+ramdisk_direct_uninstall(){
+CONTINUE=1
+echo -n "$text_find_ramdisk_auto ? <Y/n> "
+read autom
+if [ "$autom" == "Y" -o "$autom" == "y" ]; then
+( find_ramdisk_image
+unpatch_ramdisk "$RAMDISK" "true" )
+test "$?" == 0 && CONTINUE=0
+umount -l /dev/os_disk_*
+echo "Unmount all disks..."
+elif ! [ "$autom" == "N" -o "$autom" == "n" ]; then
+        exit
+fi
+if [ "$CONTINUE" == "1" ]; then
+VAR_OSROOT="$(cat $DISKINFO/blockdev)"
+VAR_RAMDISK="$(cat $DISKINFO/ramdisk)"
+RAMDISK="$VAR_RAMDISK"
+if [ "$VAR_OSROOT" ] && [ "$VAR_RAMDISK" ]; then
+( echo -n "${text_use_current_ramdisk_info}? <Y/n> "
+read opt
+if [ "$opt" == "Y" -o "$opt" == "y" ]; then
+mount_disk
+( unpatch_ramdisk "$RAMDISK" "true" )
+ERR_CODE=$?
+umount_disk
+exit $ERR_CODE
+elif ! [ "$opt" == "N" -o "$opt" == "n" ]; then
+        exit
+else
+exit 1
+fi )
+if [ "$?" == "1" ]; then
+table_list
+unpatch_ramdisk "$RAMDISK" "true"
+umount_disk
+fi
+else
+table_list
+unpatch_ramdisk "$RAMDISK" "true"
+umount_disk
+fi
+fi
+}
+
+
+patch_ramdisk_method(){
+RAMDISK=""
+print_ramdisk_method
+read c
+case "$c" in
+    1)
+        need_root_access
+        install_command="ramdisk_direct_install"
+        ;;
+     2)
+        echo "$text_enter_path_ramdisk"
+        p none "> "
+        read RAMDISK
+        install_command="patch_ramdisk"
+        ;;
+      *)
+        nomethod=true
+        ;;
+esac
+}
+
+gearlock_method(){
+RAMDISK=""
+print_gxp_method
+read c
+case "$c" in
+    1)
+        need_root_access
+        install_command="install_magisk_gearlock"
+        ;;
+     2)
+        
+        install_command="build_gxp"
+        ;;
+      *)
+        nomethod=true
+        ;;
+esac
+}
+
+
+
+install_option(){
+clear
+print_menu_install
+read build
+install_magisk=true
+install_offline=false
+MINIMAL_MAGISK=false
+APKFILE="$DLPATH/magisk.apk"
+case $build in
+1)
+    build_name="Canary"
+    URL="$canary_magisk_link"
+    ;;
+2)
+    build_name="Canary"
+    URL="https://github.com/TheHitMan7/Magisk-Files/blob/master/channel/app-release.apk?raw=true"
+    ;;
+"3")
+    echo -n "Version (Example: 24.1) > "
+    read magiskversion
+    [ -z "$magiskversion" ] && install_magisk=false || URL="https://github.com/topjohnwu/magisk-files/blob/${magiskversion}/app-release.apk?raw=true"
+    ;;
+"e")
+    echo -n "[URL]: "
+    read URL
+    [ -z "$URL" ] && install_magisk=false
+    ;;
+"a")
+   build_name="Stable"
+    install_offline=true
+    ;;
+"x")
+    build_name="Custom"
+    install_offline=true
+    echo "$text_enter_magisk_apk"
+    p none "$text_example: "; pd gray "/sdcard/Magisk.apk"
+    p none "> "
+    read custom_magisk_apk
+    APKFILE="$custom_magisk_apk"
+    [ ! -f "$APKFILE" ] && abortc light_red "Magisk APK does not exist"
+    ;;
+"z")
+    install_offline=true
+    list_apk
+    ;;
+
+*)
+    install_magisk=false
+    ;;
+esac
+
+if [ "$install_magisk" == "true" ]; then
+    clear
+    install_option_process
+fi
+
+    
+
+}
+
+uninstall_option(){
+clear
+pd gray "=============================================="
+echo "   Uninstall Magisk"
+pd gray "=============================================="
+echo "   1 - $text_uninstall_magisk_in"
+echo "   2 - $text_restore_original_ramdisk"
+echo -n "[$text_choice]: "
+read c
+case "$c" in
+1)
+   ( need_root_access; p none "$text_warn_uninstall_magisk <Y/n> "
+    read uni
+    if [ "$uni" == "y" -o "$uni" == "Y" ]; then
+    p none "$text_ask_keep_modules <Y/n> "
+    REMOVE_MAGISK_DATA=true
+    read uni2
+    [ "$uni2" == "y" -o "$uni2" == "Y" ] && REMOVE_MAGISK_DATA=false
+    clear
+    uninstall_magisk
+    fi )
+   ;;
+2)
+   unpatch_ramdisk_method
+   ;;
+esac
+}
+
+unpatch_ramdisk_method(){
+print_unpatch_ramdisk
+read c
+case "$c" in
+1)
+      ( need_root_access; clear; ramdisk_direct_uninstall )
+      ;;
+2)
+       echo "$text_enter_path_ramdisk"
+       echo -n "> "
+       read RAMDISK
+       clear
+       ( unpatch_ramdisk "$RAMDISK" )
+       ;;
+esac
+}
+
+
+
+try_mount_it(){
+echo -e "Mounting ${BGREEN}${VAR_OSROOT}${RC} to ${BPURPLE}${OSROOT}${RC}"
+mount -o ro "$VAR_OSROOT" "$OSROOT"
+mount -t ext4 "$VAR_OSROOT" "$OSROOT"
+mount -o rw,remount "$OSROOT" && IS_MOUNT=true
+mount.ntfs "$VAR_OSROOT" "$OSROOT" && IS_MOUNT=true
+$IS_MOUNT || echo -e "${BRED}$text_cannot_mount_part${RC}" 
+}
+
+try_umount_it(){
+if [ "$GEARROOT" ]; then
+for block in $GEARROOT; do
+if [ "$block" != "/system" ]; then
+echo -ne "Unmount ${BPURPLE}${block}${RC}... "
+umount -l "$block" && echo -e "${BGREEN}SUCCESS!${RC}" || echo -e "${BRED}FAILED!${RC}"
+fi
+done
+fi
+}
+
+
+mount_disk(){
+IS_MOUNT=false
+[ -z "$OSROOT" ] && OSROOT=/dev/os_disk
+umount -l "$OSROOT"
+rm -rf "$OSROOT"
+mkdir "$OSROOT"
+GEARROOT="$(mount | grep "^${VAR_OSROOT}" | awk '{ print $3 }')"
+try_mount_it
+if [ "$IS_MOUNT" == "false" ]; then
+try_umount_it
+try_mount_it
+fi
+}
+
+umount_disk(){
+echo -ne "Unmount ${BPURPLE}/dev/os_disk${RC}... "
+umount -l /dev/os_disk && echo -e "${BGREEN}SUCCESS!${RC}" || echo -e "${BRED}FAILED!${RC}" 
+}
+
+table_blockdev(){
+echo " ------- Partition Table -------"
+BLOCKDEVS="$(/system/bin/blkid -s LABEL -s TYPE | grep -v loop | grep -v "/sr" | awk 'NF')"
+#BLOCKDEVS="/dev/block/example"
+echo "$BLOCKDEVS" | nl -s "]. "
+echo "     0]. Exit table"
+IS_MOUNT=false
+while true; do
+echo -ne "+ $text_enter_part >>"
+read -r c
+VAR_OSROOT="$(echo "$BLOCKDEVS" | sed -n "$c p" 2>/dev/null | cut -d : -f1)"
+OSROOT=/dev/os_disk
+if [ "$c" == "0" ]; then
+exit
+elif [ -z "$c" ] || [ -z "$VAR_OSROOT" ]; then
+			echo -e "${RED}! $text_wrong_input ...${RC}"
+else
+# mount the partition for us
+    mount_disk
+    $IS_MOUNT && break
+fi
+done
+}
+
+find_ramdisk_image(){
+RAMDISK=""
+BLOCKDEVS="$(blkid | grep -v loop | grep -v "/sr" | awk 'NF' | cut -d : -f1)"
+BIMGVAR="$(cmdline BOOT_IMAGE)"
+SRCVAR="$(cmdline SRC)"
+[ -z "$SRCVAR" ] && SRCVAR="$(dirname "$BIMGVAR")"
+[ "$SRCVAR" == "." ] && SRCVAR="android"
+count=0
+[ -f "/gearlock/gearroot/$SRCVAR/ramdisk.img" ] && RAMDISK="/gearlock/gearroot/$SRCVAR/ramdisk.img" || RAMDISK="/gearlock/gearroot/$SRCVAR/initrd.img"
+if [ ! -f "$RAMDISK" ]; then
+unset RAMDISK
+for VAR_OSROOT in $BLOCKDEVS; do
+count="$(($count + 1))"
+OSROOT="/dev/os_disk_$count"
+mount_disk
+TARGET_ROOT="$OSROOT/$SRCVAR"
+if [ -d "$TARGET_ROOT" ] && [ -f "$TARGET_ROOT/findme" ] && [ -f "$TARGET_ROOT/initrd.img" ] && [ -f "$TARGET_ROOT/ramdisk.img" ] && file "$TARGET_ROOT/ramdisk.img" | grep -q " gzip "; then
+RAMDISK="$TARGET_ROOT/ramdisk.img"
+break;
+fi
+done
+for OSROOT in /dev/os_disk_*; do
+TARGET_ROOT="$OSROOT/$SRCVAR"
+if [ -d "$TARGET_ROOT" ] && [ -f "$TARGET_ROOT/findme" ] && [ -f "$TARGET_ROOT/initrd.img" ] && file "$TARGET_ROOT/initrd.img" | grep -q " gzip "; then
+RAMDISK="$TARGET_ROOT/initrd.img"
+break;
+fi
+done
+fi
+[ -z "$RAMDISK" ] && { abortc light_red "$text_cannot_detect_target_ramdisk"; read; }
+echo -e "- Target ramdisk: ${BGREEN}${RAMDISK}${RC}"
+}
+
+
+table_ramdisk(){
+SELECTED_RAMDISK=false
+    test -f $DISKINFO/blockdev || rm -rf $DISKINFO/blockdev
+    echo -n "$VAR_OSROOT" >$DISKINFO/blockdev
+    echo "------- CHOICE RAMDISK -------:"
+    LIST_OS="$(find "$OSROOT"  -mindepth 2 -maxdepth 2 -name "ramdisk.img" 2>/dev/null; find "$OSROOT"  -mindepth 2 -maxdepth 2 -name "initrd.img" 2>/dev/null)"
+    [ -z "$LIST_OS" ] && pd light_red "     No ramdisk!" || echo "$LIST_OS" | nl -s "]. "
+    echo "     r]. Re-mount partition"
+    echo "     0]. Exit table"
+    while true; do
+    echo -ne "$text_enter_ramdisk >>"
+    read -r c
+    VAR_RAMDISK=$(echo "$LIST_OS" | sed -n "$c p" 2>/dev/null | cut -d : -f1)
+    if [ "$c" == "0" ]; then
+        exit
+    elif [ "$c" == r ]; then
+        break
+    elif [ -z "$c" ] || [ -z "$VAR_OSROOT" ]; then
+			echo -e "${RED}! $text_wrong_input ...${RC}"
+    elif gzip -t "$VAR_RAMDISK"; then
+        echo -e "- Target ramdisk: ${BGREEN}${VAR_RAMDISK}${RC}"
+        test -f $DISKINFO/ramdisk || rm -rf $DISKINFO/ramdisk
+        echo -n "$VAR_RAMDISK" >$DISKINFO/ramdisk
+        RAMDISK="$VAR_RAMDISK"
+        echo -e "- $text_saved_ramdisk_info ${BGREEN}/data/adb/diskinfo${RC}"
+        SELECTED_RAMDISK=true
+        break
+    else
+        echo -e "${RED}! $text_unsupport_ramdisk_format${RC}"
+    fi
+    done
+}
+
+
+mount_fail_pick_again(){
+echo -e "${RED}! $text_cannot_mount_part${RC}"
+sleep 1
+table_blockdev
+}
+
+bluestacks_fix(){ (
+MODDIR=/data/adb/modules/bluestacks-fix
+MODDIR2=/data/adb/modules_update/bluestacks-fix
+mkdir -p $MODDIR
+mkdir -p $MODDIR2
+echo "MAGISKTMP=\$(magisk --path) || MAGISKTMP=/sbin
+MIRROR_SYSTEM=\"\$MAGISKTMP/.magisk/mirror/system\"
+test ! -d \"\$MIRROR_SYSTEM/android/system\" && exit
+mount --bind \"\$MIRROR_SYSTEM/android/system\" \"\$MIRROR_SYSTEM\"">$MODDIR2/post-fs-data.sh
+MODPROP="id=bluestacks-fix
+name=Bluestacks System Fix
+version=v1.0
+versionCode=10000
+author=HuskyDG
+description=Fix the incorrect Bluestacks system partition that breaks Magisk modules"
+echo "$MODPROP" >$MODDIR/module.prop
+echo "$MODPROP" >$MODDIR2/module.prop
+echo -n >$MODDIR/update
+pd light_green "$text_added_bs_module"
+) 2>/dev/null 
+}
+
+
+table_list(){
+RESET_DISKINFO="$1"
+while true; do
+clear
+mkdir -p "$DISKINFO"
+BLOCKDEV="$(cat $DISKINFO/blockdev)"
+VAR_RAMDISK="$(cat $DISKINFO/ramdisk)"
+if [ -z "$BLOCKDEV" ]; then
+    table_blockdev
+else
+    VAR_OSROOT="$BLOCKDEV"
+    echo -ne "Mount this device block?: ${BPURPLE}${BLOCKDEV}${RC} ? <Y/n>"; read m
+    if [ "$m" == "Y" -o "$m" == "y" ]; then
+        mount_disk
+        $IS_MOUNT || mount_fail_pick_again
+    else
+        table_blockdev
+     fi
+fi
+
+chkFile="ramdisk.img"
+#test_if_ramdisk
+# find Android x86 folder
+
+if $IS_MOUNT; then
+    table_ramdisk
+fi
+$SELECTED_RAMDISK && break
+done
+}
+
+list_apk(){ 
+while true; do
+clear
+pd light_cyan "$text_select_magisk_app"
+LIST_APK="$(cd "$DLPATH/save" && find * -prune -type f)"
+echo "$LIST_APK"  | nl -s "]. "
+echo "----------"
+echo "     0]. Exit here"
+echo "$text_guide_rm_magisk_app"
+echo -n "[$text_choice]: "
+read -r capk
+if [ "$capk" == 0 ]; then
+exit
+elif [ ! -z "$capk" ] && [ -f "$DLPATH/save/$(echo "$LIST_APK" | sed -n "$capk p" 2>/dev/null | cut -d : -f1)" ]; then
+APKFILE="$DLPATH/save/$(echo "$LIST_APK" | sed -n "$capk p" 2>/dev/null | cut -d : -f1)"
+break
+elif [ "$(echo "$capk" | awk '{ print $1 }')" == "rm" ]; then
+rm -rf "$DLPATH/save/$(echo "$LIST_APK" | sed -n "$(echo -n "$capk" | awk '{ print $2 }') p" 2>/dev/null | cut -d : -f1)"
+else
+echo -en "${RED}! $text_wrong_input ...${RC}"; read
+fi
+done
+
+}
+
+
+main(){
+clear
+print_menu
+read option
+no_turn_back=false
+case $option in
+1)
+   ( install_option )
+    ;;
+2)
+    uninstall_option
+    ;;
+3)
+    (need_root_access; unsu)
+    ;;
+0)
+    exit 0
+    ;;
+*)
+    no_turn_back=true
+    ;;
+esac
+$no_turn_back || turn_back
+}
+
+install_option_dd(){
+download_magisk_apk
+case "$AGV3" in
+    "system")
+        (need_root_access; install_magisk)
+        ;;
+     "ramdisk")
+         (need_root_access; ramdisk_direct_install)
+         ;;
+     "ramdisk-patch")
+         (patch_ramdisk "$AGV4")
+         ;;
+     "export-gxp")
+         ( build_gxp )
+         ;;
+     *)
+         install_option_method
+         ;;
+esac
+}
+
+
+
+
+
+APKFILE="$DLPATH/magisk.apk"
+if [ "$AGV1" != "noexec" ]; then
+    if [ "$AGV1" == "option" ]; then
+        case "$AGV2" in
+            "install")
+                install_option;
+                ;;
+
+            "install:canary")
+    build_name="Canary"
+    URL="$canary_magisk_link"
+    install_option_dd
+    ;;
+            "install:offline")
+    build_name="Stable"
+    install_offline=true
+    install_option_dd
+    ;;
+            "install:custom")
+    build_name="Custom"
+    install_offline=true
+    APKFILE="$AGV5"
+    install_option_dd
+    ;;
+            "install:"*)
+    build_name="Stable"
+URL="https://github.com/topjohnwu/magisk-files/blob/${AGV2: 8}/app-release.apk?raw=true"
+    install_option_dd
+    ;;
+            "uninstall")
+            uninstall_option
+            ;;
+            *)
+            open_main
+            ;;
+            
+        esac
+    else
+        open_main
+    fi
+fi; clean_flash 2>/dev/null; true

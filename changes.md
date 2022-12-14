@@ -1,0 +1,3 @@
+- [Magisk in initrd.img]: Use `/android/dev` instead of `/android/oem` for Magisk initialize
+- [General]: Remove unused function
+- [General]: Remove option to install [Fox's Magisk module manager](https://github.com/Fox2Code/FoxMagiskModuleManager) 
