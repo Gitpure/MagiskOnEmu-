@@ -23,8 +23,8 @@ Note: Some features might not work on some emulator, Please read [Emulator that 
 
 ## Useful link
 
-- [Installation Guide](https://github.com/HuskyDG/MagiskOnNox/wiki/Installation) - Learn how to install Magisk on Emulator, Android x86 project
-- [Magisk on Emulator Wiki](https://github.com/HuskyDG/MagiskOnNox/wiki)
+- [Installation Guide](https://github.com/Gitpure/MagiskOnEmu-/wiki/Installation) - Learn how to install Magisk on Emulator, Android x86 project
+- [Magisk on Emulator Wiki](https://github.com/Gitpure/MagiskOnEmu-/wiki)
 - [Magisk Official Documentation](https://topjohnwu.github.io/Magisk/)  
 
 ## Credits
